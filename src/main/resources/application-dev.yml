@@ -1,0 +1,9 @@
+ticker:
+  input:
+    dir: /Users/home/skylife/input
+    charset: euc-kr
+  output:
+    dir: /Users/home/skylife/output
+  broadcast:
+    date:
+      format: yyyyMMddHHmmss

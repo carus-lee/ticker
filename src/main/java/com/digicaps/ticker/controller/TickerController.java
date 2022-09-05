@@ -1,7 +1,9 @@
 package com.digicaps.ticker.controller;
 
+import com.google.gson.JsonObject;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.cglib.core.Local;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -9,34 +11,41 @@ import javax.annotation.PostConstruct;
 import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 
 @Slf4j
 @RestController
 public class TickerController 
 {
-	private static final String FILE_LOAD_DIR = "C:\\home\\skylife\\input";
-	private static final String FILE_SAVE_DIR = "C:\\home\\skylife\\output";
+	@Value("${ticker.input.dir}")
+	private String FILE_LOAD_DIR; //파일조회 디렉토리
+	@Value("${ticker.output.dir}")
+	private String FILE_SAVE_DIR; //파일저장 디렉토리
+	@Value("${ticker.broadcast.date.format}")
+	private String DATE_FORMAT; // 날짜포맷 (yyyyMMddHHmmss)
+	@Value("${ticker.input.charset}")
+	private String FILE_READ_CHARSET;
+
 	private WatchKey watchKey;
 
 	@PostConstruct
 	public void watchInit() throws IOException
 	{
-		//watchService 생성
-		WatchService watchService = FileSystems.getDefault().newWatchService();
+		WatchService watchService = FileSystems.getDefault().newWatchService(); //watchService 생성
+		Path path = Paths.get(FILE_LOAD_DIR); //경로 생성
 
-		log.info("Static Directroy = {}", FILE_LOAD_DIR);
-//		log.info("property Directroy = {}", testDir);
-		//경로 생성
-		Path path = Paths.get(FILE_LOAD_DIR);
+		log.info("fileLoad Directroy = {}, fileSave Directroy = {}", FILE_LOAD_DIR, FILE_SAVE_DIR);
 
 		//해당 디렉토리 경로에 와치서비스와 이벤트 등록 (프로퍼티로 이벤트 등록)
-		path.register(watchService, 
-				StandardWatchEventKinds.ENTRY_CREATE, 
-				StandardWatchEventKinds.ENTRY_DELETE, 
-				StandardWatchEventKinds.ENTRY_MODIFY, 
+		path.register(watchService,
+				StandardWatchEventKinds.ENTRY_CREATE,
+				StandardWatchEventKinds.ENTRY_DELETE,
+				StandardWatchEventKinds.ENTRY_MODIFY,
 				StandardWatchEventKinds.OVERFLOW);
-		
+
 		Thread thread = new Thread(()-> {
 			while(true)
 			{
@@ -52,15 +61,14 @@ public class TickerController
 				{
 					WatchEvent.Kind<?> kind = event.kind(); //이벤트 종류
 					Path paths = (Path)event.context();	//경로
-					log.info("path = {}", paths.toAbsolutePath()); //C:\...\...\test.txt
-					
+
 					if(kind.equals(StandardWatchEventKinds.ENTRY_CREATE)) {
 						log.info("created something in directory");
 
 						// 파일처리
 						try {
 							String[] resultArr = fnFileRead(paths.getFileName().toString());
-							fnFileWrite(paths.getFileName().toString(), resultArr);
+							fnFileWrite(resultArr);
 						}catch (IOException e) {
 							e.printStackTrace();
 						}
@@ -97,12 +105,12 @@ public class TickerController
 	public String[] fnFileRead(String fileName) throws IOException
 	{
 		log.info("========== fnFileCut() ==========");
-		String[] resultArr = new String[1000];
+		String[] resultArr = new String[3];
 		String filePath = FILE_LOAD_DIR + "\\" + fileName; //파일경로
-		log.info("filePath = {}", filePath);
+		log.info("fileName = {}, filePath = {}", fileName, filePath);
 
 		FileInputStream input = new FileInputStream(filePath); //파일 입력스트림 생성
-		InputStreamReader reader = new InputStreamReader(input, "euc-kr");
+		InputStreamReader reader = new InputStreamReader(input, FILE_READ_CHARSET);
 		BufferedReader bufferedReader = new BufferedReader(reader); // 입력 버퍼 생성
 
 		String line;
@@ -121,31 +129,45 @@ public class TickerController
 		bufferedReader.close();
 
 		// TODO
-		// 1.상기 3개정보를 내부 API로 보내줘야 됨. (김정현부장님 검토중)
-		// 2.모든 채널에 재난정보 자막이 나갔다면 "코마"에 결과 전달
-		// 3.완료된 정보 파일로 떨궈줘야 됨.
-
+		// 1.상기정보를 내부API로 전송. (김정현부장님 검토중)
 		return resultArr;
 	}
 
 	/**
 	 * 파일 저장
 	 */
-	public void fnFileWrite(String fileName, String[] dataArr) throws IOException
+	public void fnFileWrite(String[] dataArr) throws IOException
 	{
 		log.info("========== fnFileWrite() ==========");
 		if (dataArr == null) return;
 
-		// 신규 파일 생성
-		File newFile = new File(FILE_SAVE_DIR + "\\" + "RSLT_" + fileName);
-		log.info("fileInfo = {}", newFile.getPath());
+		// 신규 파일 생성 (RSLT_식별자.json)
+		// dataArr = 0:식별자, 1:메시지 내용, 2:반복횟수
+		File newFile = new File(FILE_SAVE_DIR + "\\" + "RSLT_" + dataArr[0] + ".json");
+		log.debug("fileName = {}", newFile.getName());
+
+		LocalDateTime nowDateTime = LocalDateTime.now(ZoneId.of("Asia/Seoul"));
+		LocalDateTime nowDateTimeTo5miniteAdd = nowDateTime.plusMinutes(5L);
+
+		String startDt = nowDateTime.format(DateTimeFormatter.ofPattern(DATE_FORMAT)).toString();
+		String endDt = nowDateTimeTo5miniteAdd.format(DateTimeFormatter.ofPattern(DATE_FORMAT)).toString(); //startDt + 5분(임시)
+		log.debug("nowDateTime = {}", nowDateTime);
+		log.debug("nowDateTimeAdd5minute = {}", nowDateTimeTo5miniteAdd);
+		log.info("startDT = {}, endDt = {}", startDt, endDt);
+
+		// JSON 생성
+		JsonObject jsonObject = new JsonObject();
+		jsonObject.addProperty("indentifier", dataArr[0]); //식별자
+		jsonObject.addProperty("broadcastDT", startDt); //송출시작시각
+		jsonObject.addProperty("broadcastET", endDt);   //송출종료시각
+		jsonObject.addProperty("ResultCode", "success");
+		jsonObject.addProperty("ErrorMsg", "");
 
 		FileOutputStream fileWriter = new FileOutputStream(newFile, false); //파일 출력스트림 생성
 		OutputStreamWriter writer = new OutputStreamWriter(fileWriter, StandardCharsets.UTF_8);
 		BufferedWriter bufferedWriter = new BufferedWriter(writer); //출력 버퍼 생성
 
-		bufferedWriter.write(dataArr[0]); //저장
-
+		bufferedWriter.write(jsonObject.toString()); //저장
 		bufferedWriter.flush();
 		bufferedWriter.close();
 	}
