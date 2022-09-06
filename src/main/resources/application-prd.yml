@@ -1,9 +1,9 @@
 ticker:
   input:
-    dir: /home/skylife/input
+    dir: /home/cgms/inputData
     charset: euc-kr
   output:
-    dir: /home/skylife/output
+    dir: /home/cgms/outputData
   broadcast:
     date:
       format: yyyyMMddHHmmss

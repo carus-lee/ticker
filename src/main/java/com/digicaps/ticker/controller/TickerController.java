@@ -121,7 +121,7 @@ public class TickerController
 			resultArr[0] = cutStrArr[14]; //식별자
 			resultArr[1] = cutStrArr[9]; //메시지 내용
 			resultArr[2] = cutStrArr[3]; //반복횟수
-			log.info("resultArr = {}", resultArr[0]);
+			log.info("identifier = {}, message = {}, repeatCount = {}", resultArr[0], resultArr[1], resultArr[2]);
 		}
 
 		bufferedReader.close();

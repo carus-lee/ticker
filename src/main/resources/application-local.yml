@@ -1,9 +1,9 @@
 ticker:
   input:
-    dir: C:\home\skylife\input
+    dir: C:\home\cgms\inputData
     charset: euc-kr
   output:
-    dir: C:\home\skylife\output
+    dir: C:\home\cgms\outputData
   broadcast:
     date:
       format: yyyyMMddHHmmss
