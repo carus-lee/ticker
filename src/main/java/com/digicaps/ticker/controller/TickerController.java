@@ -3,7 +3,6 @@ package com.digicaps.ticker.controller;
 import com.google.gson.JsonObject;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.cglib.core.Local;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -68,7 +67,7 @@ public class TickerController
 						// 파일처리
 						try {
 							String[] resultArr = fnFileRead(paths.getFileName().toString());
-							fnFileWrite(resultArr);
+							fnFileSave(resultArr);
 						}catch (IOException e) {
 							e.printStackTrace();
 						}
@@ -85,7 +84,6 @@ public class TickerController
 				// reset
 				if(!watchKey.reset()) {
 					try {
-						log.info("watchService.close()");
 						watchService.close();
 					} catch (IOException e) {
 						e.printStackTrace();
@@ -104,12 +102,12 @@ public class TickerController
 	 */
 	public String[] fnFileRead(String fileName) throws IOException
 	{
-		log.info("========== fnFileCut() ==========");
+		log.info("========== fnFileRead() ==========");
 		String[] resultArr = new String[3];
-		String filePath = FILE_LOAD_DIR + "\\" + fileName; //파일경로
-		log.info("fileName = {}, filePath = {}", fileName, filePath);
+		File file = new File(FILE_LOAD_DIR, fileName);
+		log.info("filePath = {}, fileName = {}", file.getPath(), file.getName());
 
-		FileInputStream input = new FileInputStream(filePath); //파일 입력스트림 생성
+		FileInputStream input = new FileInputStream(file); //파일 입력스트림 생성
 		InputStreamReader reader = new InputStreamReader(input, FILE_READ_CHARSET);
 		BufferedReader bufferedReader = new BufferedReader(reader); // 입력 버퍼 생성
 
@@ -129,47 +127,70 @@ public class TickerController
 		bufferedReader.close();
 
 		// TODO
-		// 1.상기정보를 내부API로 전송. (김정현부장님 검토중)
+		// 1.상기정보(식별자/메시지/반복횟수)를 내부API로 전송. (김정현부장님 검토중)
 		return resultArr;
 	}
 
 	/**
 	 * 파일 저장
 	 */
-	public void fnFileWrite(String[] dataArr) throws IOException
+	public void fnFileSave(String[] dataArr) throws IOException
 	{
-		log.info("========== fnFileWrite() ==========");
+		log.info("========== fnFileSave() ==========");
 		if (dataArr == null) return;
 
-		// 신규 파일 생성 (RSLT_식별자.json)
-		// dataArr = 0:식별자, 1:메시지 내용, 2:반복횟수
-		File newFile = new File(FILE_SAVE_DIR + "\\" + "RSLT_" + dataArr[0] + ".json");
-		log.debug("fileName = {}", newFile.getName());
-
-		LocalDateTime nowDateTime = LocalDateTime.now(ZoneId.of("Asia/Seoul"));
-		LocalDateTime nowDateTimeTo5miniteAdd = nowDateTime.plusMinutes(5L);
-
-		String startDt = nowDateTime.format(DateTimeFormatter.ofPattern(DATE_FORMAT)).toString();
-		String endDt = nowDateTimeTo5miniteAdd.format(DateTimeFormatter.ofPattern(DATE_FORMAT)).toString(); //startDt + 5분(임시)
-		log.debug("nowDateTime = {}", nowDateTime);
-		log.debug("nowDateTimeAdd5minute = {}", nowDateTimeTo5miniteAdd);
-		log.info("startDT = {}, endDt = {}", startDt, endDt);
-
-		// JSON 생성
 		JsonObject jsonObject = new JsonObject();
-		jsonObject.addProperty("indentifier", dataArr[0]); //식별자
-		jsonObject.addProperty("broadcastDT", startDt); //송출시작시각
-		jsonObject.addProperty("broadcastET", endDt);   //송출종료시각
-		jsonObject.addProperty("ResultCode", "success");
-		jsonObject.addProperty("ErrorMsg", "");
+		BufferedWriter bufferedWriter = null;
+		LocalDateTime nowDateTime = LocalDateTime.now(ZoneId.of("Asia/Seoul"));
+		String startDt = "";
+		String endDt = "";
 
-		FileOutputStream fileWriter = new FileOutputStream(newFile, false); //파일 출력스트림 생성
-		OutputStreamWriter writer = new OutputStreamWriter(fileWriter, StandardCharsets.UTF_8);
-		BufferedWriter bufferedWriter = new BufferedWriter(writer); //출력 버퍼 생성
+		try
+		{
+			// 신규 파일 생성 (파일명규칙 ==> RSLT_식별자.json)
+			// dataArr = 0:식별자, 1:메시지 내용, 2:반복횟수
+//			File newFile = new File(FILE_SAVE_DIR + "\\" + "RSLT_" + dataArr[0] + ".json");
+			File newFile = new File(FILE_SAVE_DIR, "RSLT_"+ dataArr[0] +".json");
+			log.debug("fileName = {}", newFile.getName());
 
-		bufferedWriter.write(jsonObject.toString()); //저장
-		bufferedWriter.flush();
-		bufferedWriter.close();
+			LocalDateTime nowDateTimeTo5miniteAdd = nowDateTime.plusMinutes(5L);
+			startDt = nowDateTime.format(DateTimeFormatter.ofPattern(DATE_FORMAT));
+			endDt = nowDateTimeTo5miniteAdd.format(DateTimeFormatter.ofPattern(DATE_FORMAT)); //startDt + 5분(임시)
+			log.debug("nowDateTime = {}", nowDateTime);
+			log.debug("nowDateTimeAdd5minute = {}", nowDateTimeTo5miniteAdd);
+			log.info("startDT = {}, endDt = {}", startDt, endDt);
+
+			// JSON 생성
+			jsonObject.addProperty("indentifier", dataArr[0]); //식별자
+			jsonObject.addProperty("broadcastDT", startDt); //송출시작시각
+			jsonObject.addProperty("broadcastET", endDt);   //송출종료시각
+			jsonObject.addProperty("ResultCode", "success");
+			jsonObject.addProperty("ErrorMsg", "");
+
+			FileOutputStream fileWriter = new FileOutputStream(newFile, false); //파일 출력스트림 생성
+			OutputStreamWriter writer = new OutputStreamWriter(fileWriter, StandardCharsets.UTF_8);
+			bufferedWriter = new BufferedWriter(writer); //출력 버퍼 생성
+			bufferedWriter.write(jsonObject.toString()); //저장
+
+		}
+		catch (Exception e)
+		{
+			// JSON 생성
+			jsonObject.addProperty("indentifier", dataArr[0]); //식별자
+			jsonObject.addProperty("broadcastDT", startDt); //송출시작시각
+			jsonObject.addProperty("broadcastET", endDt);   //송출종료시각
+			jsonObject.addProperty("ResultCode", "fail");
+			jsonObject.addProperty("ErrorMsg", e.getMessage());
+
+			e.printStackTrace();
+		}
+		finally
+		{
+			if (bufferedWriter != null) {
+				bufferedWriter.flush();
+				bufferedWriter.close();
+			}
+		}
 	}
 
 	public void printArray(String[] array) {
