@@ -1,19 +1,35 @@
 package com.digicaps.ticker.controller;
 
-import com.google.gson.JsonObject;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.RestController;
-
-import javax.annotation.PostConstruct;
-import java.io.*;
+import java.io.BufferedReader;
+import java.io.BufferedWriter;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.InputStreamReader;
+import java.io.OutputStreamWriter;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.*;
+import java.nio.file.FileSystems;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.nio.file.StandardWatchEventKinds;
+import java.nio.file.WatchEvent;
+import java.nio.file.WatchKey;
+import java.nio.file.WatchService;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
+
+import javax.annotation.PostConstruct;
+
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+import com.google.gson.JsonObject;
+
+import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
 @RestController
@@ -64,9 +80,12 @@ public class TickerController
 					if(kind.equals(StandardWatchEventKinds.ENTRY_CREATE)) {
 						log.info("created something in directory");
 
-						// 파일처리
+						/*
+						 * 재난자막 파일처리
+						 */
 						try {
 							String[] resultArr = fnFileRead(paths.getFileName().toString());
+							// TODO resultArr정보(식별자/메시지/반복횟수)를 "재난자막 전송결과 API"에 전달 (김정현부장님 검토중)
 							fnFileSave(resultArr);
 						}catch (IOException e) {
 							e.printStackTrace();
@@ -103,7 +122,6 @@ public class TickerController
 	public String[] fnFileRead(String fileName) throws IOException
 	{
 		log.info("========== fnFileRead() ==========");
-		String[] resultArr = new String[3];
 		File file = new File(FILE_LOAD_DIR, fileName);
 		log.info("filePath = {}, fileName = {}", file.getPath(), file.getName());
 
@@ -112,56 +130,55 @@ public class TickerController
 		BufferedReader bufferedReader = new BufferedReader(reader); // 입력 버퍼 생성
 
 		String line;
-		while( (line = bufferedReader.readLine()) != null )
-		{ // 파일 내 문자열을 1줄씩 읽기
-			String[] cutStrArr = line.split("\\^");
-			log.info("cutStrArr.length = {}", cutStrArr.length);
-			printArray(cutStrArr);
-
-			resultArr[0] = cutStrArr[14]; //식별자
-			resultArr[1] = cutStrArr[9]; //메시지 내용
-			resultArr[2] = cutStrArr[3]; //반복횟수
-			log.info("identifier = {}, message = {}, repeatCount = {}", resultArr[0], resultArr[1], resultArr[2]);
+		StringBuffer buf = new StringBuffer();
+		while( (line = bufferedReader.readLine()) != null ) {
+			buf.append(line);
 		}
-
+		
+		String allStr = buf.toString().replaceAll("\r\n", "");
+		log.info("allStr = {}", allStr);
+		String[] cutStrArr = allStr.split("\\^"); //[14]:식별자, [9]:메시지내용, [3]반복횟수
+		log.info("cutStrArr.length = {}", cutStrArr.length);
+		printArray(cutStrArr);
+		log.info("indentifier = {}, message = {}, repeatCount = {}", cutStrArr[14], cutStrArr[9], cutStrArr[3]);
+		
 		bufferedReader.close();
 
-		// TODO
-		// 1.상기정보(식별자/메시지/반복횟수)를 내부API로 전송. (김정현부장님 검토중)
-		return resultArr;
+		return cutStrArr;
 	}
 
 	/**
 	 * 파일 저장
 	 */
-	public void fnFileSave(String[] dataArr) throws IOException
+	public void fnFileSave(String[] resultArr) throws IOException
 	{
 		log.info("========== fnFileSave() ==========");
-		if (dataArr == null) return;
+		if (resultArr == null) return;
+		String indentifier = resultArr[14];
 
 		JsonObject jsonObject = new JsonObject();
 		BufferedWriter bufferedWriter = null;
 		LocalDateTime nowDateTime = LocalDateTime.now(ZoneId.of("Asia/Seoul"));
 		String startDt = "";
 		String endDt = "";
-
+		LocalDateTime nowDateTimeTo5miniteAdd = nowDateTime.plusMinutes(5L);
+		startDt = nowDateTime.format(DateTimeFormatter.ofPattern(DATE_FORMAT));
+		endDt = nowDateTimeTo5miniteAdd.format(DateTimeFormatter.ofPattern(DATE_FORMAT)); //startDt + 5분(임시)
+		log.debug("nowDateTime = {}, Add5minute = {}", nowDateTime, nowDateTimeTo5miniteAdd);
+		log.info("startDT = {}, endDt = {}", startDt, endDt);
+		
+		// JSON 생성
+		jsonObject.addProperty("indentifier", indentifier); //식별자
+		jsonObject.addProperty("broadcastDT", startDt); //송출시작시각
+		jsonObject.addProperty("broadcastET", endDt);   //송출종료시각
+		
 		try
 		{
 			// 신규 파일 생성 (파일명규칙 ==> RSLT_식별자.json)
-			// dataArr = 0:식별자, 1:메시지 내용, 2:반복횟수
-			File newFile = new File(FILE_SAVE_DIR, "RSLT_"+ dataArr[0] +".json");
+			File newFile = new File(FILE_SAVE_DIR, "RSLT_"+ indentifier +".json");
 			log.debug("fileName = {}", newFile.getName());
 
-			LocalDateTime nowDateTimeTo5miniteAdd = nowDateTime.plusMinutes(5L);
-			startDt = nowDateTime.format(DateTimeFormatter.ofPattern(DATE_FORMAT));
-			endDt = nowDateTimeTo5miniteAdd.format(DateTimeFormatter.ofPattern(DATE_FORMAT)); //startDt + 5분(임시)
-			log.debug("nowDateTime = {}, Add5minute = {}", nowDateTime, nowDateTimeTo5miniteAdd);
-			log.info("startDT = {}, endDt = {}", startDt, endDt);
-
-			// JSON 생성
-			jsonObject.addProperty("indentifier", dataArr[0]); //식별자
-			jsonObject.addProperty("broadcastDT", startDt); //송출시작시각
-			jsonObject.addProperty("broadcastET", endDt);   //송출종료시각
+			// JSON (성공)
 			jsonObject.addProperty("ResultCode", "success");
 			jsonObject.addProperty("ErrorMsg", "");
 
@@ -169,14 +186,10 @@ public class TickerController
 			OutputStreamWriter writer = new OutputStreamWriter(fileWriter, StandardCharsets.UTF_8);
 			bufferedWriter = new BufferedWriter(writer); //출력 버퍼 생성
 			bufferedWriter.write(jsonObject.toString()); //저장
-
 		}
 		catch (Exception e)
 		{
-			// JSON 생성
-			jsonObject.addProperty("indentifier", dataArr[0]); //식별자
-			jsonObject.addProperty("broadcastDT", startDt); //송출시작시각
-			jsonObject.addProperty("broadcastET", endDt);   //송출종료시각
+			// JSON (에러)
 			jsonObject.addProperty("ResultCode", "fail");
 			jsonObject.addProperty("ErrorMsg", e.getMessage());
 
@@ -198,10 +211,5 @@ public class TickerController
 		for(int i = 0; i < array.length; i++) {
 			log.info(" str[{}] = {}", i, array[i]);
 		}
-	}
-
-	@GetMapping("/test")
-	public String test() {
-		return "hello";
 	}
 }
