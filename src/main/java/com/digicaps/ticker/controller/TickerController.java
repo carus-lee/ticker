@@ -149,15 +149,13 @@ public class TickerController
 		{
 			// 신규 파일 생성 (파일명규칙 ==> RSLT_식별자.json)
 			// dataArr = 0:식별자, 1:메시지 내용, 2:반복횟수
-//			File newFile = new File(FILE_SAVE_DIR + "\\" + "RSLT_" + dataArr[0] + ".json");
 			File newFile = new File(FILE_SAVE_DIR, "RSLT_"+ dataArr[0] +".json");
 			log.debug("fileName = {}", newFile.getName());
 
 			LocalDateTime nowDateTimeTo5miniteAdd = nowDateTime.plusMinutes(5L);
 			startDt = nowDateTime.format(DateTimeFormatter.ofPattern(DATE_FORMAT));
 			endDt = nowDateTimeTo5miniteAdd.format(DateTimeFormatter.ofPattern(DATE_FORMAT)); //startDt + 5분(임시)
-			log.debug("nowDateTime = {}", nowDateTime);
-			log.debug("nowDateTimeAdd5minute = {}", nowDateTimeTo5miniteAdd);
+			log.debug("nowDateTime = {}, Add5minute = {}", nowDateTime, nowDateTimeTo5miniteAdd);
 			log.info("startDT = {}, endDt = {}", startDt, endDt);
 
 			// JSON 생성
