@@ -8,10 +8,6 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
-import java.net.HttpURLConnection;
-import java.net.MalformedURLException;
-import java.net.URL;
-import java.net.URLConnection;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.FileSystems;
 import java.nio.file.Path;
@@ -29,16 +25,21 @@ import java.util.Map;
 
 import javax.annotation.PostConstruct;
 
-import lombok.SneakyThrows;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.reactive.function.client.WebClient;
 
+import com.digicaps.ticker.vo.PollingVo;
+import com.digicaps.ticker.vo.PushVo;
 import com.google.gson.JsonObject;
 
+import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
-import org.thymeleaf.postprocessor.PostProcessor;
+import reactor.core.publisher.Mono;
 
 @Slf4j
 @RestController
@@ -49,9 +50,17 @@ public class TickerController
 	@Value("${ticker.output.dir}")
 	private String FILE_SAVE_DIR; //파일저장 디렉토리
 	@Value("${ticker.broadcast.date.format}")
-	private String DATE_FORMAT; // 날짜포맷 (yyyyMMddHHmmss)
+	private String DATE_FORMAT; //날짜포맷 (yyyyMMddHHmmss)
 	@Value("${ticker.input.charset}")
-	private String FILE_READ_CHARSET;
+	private String FILE_READ_CHARSET; //파일조회 인코딩
+	@Value("${api.baseUrl}")
+	private String BASE_URL;
+	@Value("${api.pushUrl}")
+	private String PUSH_URL;
+	@Value("${api.pollingUrl}")
+	private String POLLING_URL;
+	@Value("${api.pollingRetryUrl}")
+	private String POLLING_RETRY_URL;
 
 	private WatchKey watchKey;
 
@@ -92,17 +101,23 @@ public class TickerController
 						/*
 						 * 재난자막 파일처리
 						 */
-						try {
-							String[] resultArr = fnFileRead(paths.getFileName().toString());
-							String rs1 = fnTickerPush(resultArr[14], resultArr[9], resultArr[3]);	//재난자막정보 전달
-							String rs2 = fnTickerPolling(); //재난자막 송출여부 확인
+						try 
+						{
+							String[] resultArr = fnFileRead(paths.getFileName().toString()); //재난자막 파일조회
+							String pushResult = fnTickerPush(resultArr[14], resultArr[9], resultArr[3]); //[API]재난자막 push(식별자/메시지/반복횟수)
+							PollingVo pollingResult = null; //[API]재난자막 송출확인 결과
+							if ("0000".equals(pushResult)) {
+								pollingResult = fnTickerPolling(resultArr[14]);
+							}else {
+								log.info("pushResult = {}", pushResult);
+							}
 
-							// TODO resultCode에 따른 처리 (0000=성공, 2001=retry)
-							if (rs2 == "0000") {
-								fnFileSave(resultArr);
+							if (pollingResult != null && "0000".equals(pollingResult.getResultCode())) {
+								fnFileSave(resultArr, pollingResult.broadcastDT, pollingResult.broadcastET); //송출결과 파일저장
 							}else {
 								// retry
-								fnTickerPolling();
+								log.info("== Polling retry..");
+								pollingResult = fnTickerPolling(resultArr[14]);
 							}
 						}catch (IOException e) {
 							e.printStackTrace();
@@ -138,7 +153,7 @@ public class TickerController
 	 */
 	public String[] fnFileRead(String fileName) throws IOException
 	{
-		log.info("========== fnFileRead() ==========");
+		log.info("===== fnFileRead() =====");
 		File file = new File(FILE_LOAD_DIR, fileName);
 		log.info("filePath = {}, fileName = {}", file.getPath(), file.getName());
 
@@ -153,7 +168,7 @@ public class TickerController
 		{
 			if(lineCnt == 0) {
 				int index = line.indexOf("$");
-				buf.append(line.substring(1, line.length()));
+				buf.append(line.substring(index, line.length()));
 			}else {
 				buf.append(line);
 			}
@@ -174,27 +189,28 @@ public class TickerController
 	/**
 	 * 파일 저장
 	 */
-	public void fnFileSave(String[] resultArr) throws IOException
+	public void fnFileSave(String[] resultArr, String broadcastDT, String broadcastET) throws IOException
 	{
-		log.info("========== fnFileSave() ==========");
+		log.info("===== fnFileSave() =====");
 		if (resultArr == null) return;
 		String indentifier = resultArr[14];
 
 		JsonObject jsonObject = new JsonObject();
 		BufferedWriter bufferedWriter = null;
-		LocalDateTime nowDateTime = LocalDateTime.now(ZoneId.of("Asia/Seoul"));
-		String startDt = "";
-		String endDt = "";
-		LocalDateTime nowDateTimeTo5miniteAdd = nowDateTime.plusMinutes(5L);
-		startDt = nowDateTime.format(DateTimeFormatter.ofPattern(DATE_FORMAT));
-		endDt = nowDateTimeTo5miniteAdd.format(DateTimeFormatter.ofPattern(DATE_FORMAT)); //startDt + 5분(임시)
-		log.debug("nowDateTime = {}, Add5minute = {}", nowDateTime, nowDateTimeTo5miniteAdd);
-		log.info("startDT = {}, endDt = {}", startDt, endDt);
+//		LocalDateTime nowDateTime = LocalDateTime.now(ZoneId.of("Asia/Seoul"));
+//		String startDt = "";
+//		String endDt = "";
+//		LocalDateTime nowDateTimeTo5miniteAdd = nowDateTime.plusMinutes(5L);
+//		startDt = nowDateTime.format(DateTimeFormatter.ofPattern(DATE_FORMAT));
+//		endDt = nowDateTimeTo5miniteAdd.format(DateTimeFormatter.ofPattern(DATE_FORMAT)); //startDt + 5분(임시)
+//		log.debug("nowDateTime = {}, Add5minute = {}", nowDateTime, nowDateTimeTo5miniteAdd);
+//		log.info("startDT = {}, endDt = {}", startDt, endDt);
+		log.info("indentifier = {}, broadcastDT = {}, broadcastET = {}", indentifier, broadcastDT, broadcastET);
 		
 		// JSON 생성
 		jsonObject.addProperty("indentifier", indentifier); //식별자
-		jsonObject.addProperty("broadcastDT", startDt); //송출시작시각
-		jsonObject.addProperty("broadcastET", endDt);   //송출종료시각
+		jsonObject.addProperty("broadcastDT", broadcastDT); //송출시작시각
+		jsonObject.addProperty("broadcastET", broadcastET); //송출종료시각
 		
 		try
 		{
@@ -229,57 +245,60 @@ public class TickerController
 	}
 
 	/**
-	 * 재난자막정보 전달 
+	 * 재난자막정보 Push 
 	 */
 	@SneakyThrows
 	public String fnTickerPush(String SubIdenti, String SubRepeti, String SubText) throws RuntimeException
 	{
-		log.info("========== fnTickerPush() ==========");
-
+		log.info("===== fnTickerPush() =====");
 		Map<String, Object> params = new HashMap<String, Object>();
 		params.put("SubIdenti", SubIdenti);
 		params.put("SubRepeti", SubRepeti);
 		params.put("SubText", SubText);
+		log.info("params.toString() = {}", params.toString());
 
-		StringBuilder postData = new StringBuilder();
-		for(Map.Entry<String,Object> param : params.entrySet()) {
-			if(postData.length() != 0) postData.append('&');
-			postData.append(param.getKey());
-			postData.append('=');
-			postData.append(param.getValue());
-		}
-		byte[] postDataBytes = postData.toString().getBytes("UTF-8");
-
-		URL url = new URL("10.13.14.1:5005/pcms/push");
-		HttpURLConnection con = (HttpURLConnection)url.openConnection();
-		con.setRequestMethod("POST");
-		con.setDoOutput(true);
-		con.getOutputStream().write(postDataBytes);
-
-		BufferedReader in = new BufferedReader(new InputStreamReader(con.getInputStream(), "UTF-8"));
-		String inputLine;
-		StringBuffer response = new StringBuffer();
-		while((inputLine = in.readLine()) != null) {
-			response.append(inputLine);
-		}
-		in.close();
-
-		String json = response.toString();
-		log.info("result json = []", json);
-
-		return "0000";
+		WebClient client = WebClient.builder()
+				.baseUrl(BASE_URL)
+				.defaultHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
+				.defaultUriVariables(params)
+				.build();
+		
+		ResponseEntity<PushVo> response = client.post()
+				.uri(PUSH_URL)
+				.retrieve()
+				.toEntity(PushVo.class)
+				.block();
+		log.info("ResultCode = {}", response.getBody().ResultCode);
+		
+		return response.getBody().ResultCode;
 	}
 
 	/**
-	 * 재난자막정보 송출여부 확인
+	 * 재난자막정보 송출 확인
 	 */
-	public String fnTickerPolling()
+	public PollingVo fnTickerPolling(String indentifier)
 	{
-		log.info("========== fnTickerPolling() ==========");
-		return "0000";
+		log.info("===== fnTickerPolling() =====");
+		Map<String, Object> params = new HashMap<>();
+		params.put("indentifier", indentifier);
+		
+		WebClient client = WebClient.builder()
+				.baseUrl(BASE_URL)
+				.defaultHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
+				.defaultUriVariables(params)
+				.build();
+		
+		ResponseEntity<PollingVo> response = client.get()
+				.uri(POLLING_URL + indentifier)
+				//.uri(POLLING_RETRY_URL)
+				.retrieve()
+				.toEntity(PollingVo.class)
+				.block();
+		log.info("response = {}", response.getBody().toString());
+		
+		return response.getBody();
 	}
-
-
+		
 	public void printArray(String[] array) {
 		if (array == null)
 			return;
@@ -293,16 +312,7 @@ public class TickerController
 	public void logGet(){
 		log.trace("trace message");
 		log.debug("debug message");
-		log.info("info message"); // default
-		log.warn("warn message");
-		log.error("error message");
-	}
-
-	@PostMapping("/")
-	public void logPost(){
-		log.trace("trace message");
-		log.debug("debug message");
-		log.info("info message"); // default
+		log.info("info message");
 		log.warn("warn message");
 		log.error("error message");
 	}

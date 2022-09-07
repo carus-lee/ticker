@@ -15,3 +15,9 @@ log:
       error: err
     maxHistory: 30
     totalSizeCap: 10MB
+api:
+  baseUrl: http://localhost:8080
+  pushUrl: /pcms/push
+  pollingUrl: /pcms/status/
+  pollingRetryUrl: /pcms/statusretry/
+  retryCnt: 2
