@@ -7,3 +7,11 @@ ticker:
   broadcast:
     date:
       format: yyyyMMddHHmmss
+log:
+  config:
+    path: C:\home\cgms\logs
+    filename:
+      info: log
+      error: err
+    maxHistory: 30
+    totalSizeCap: 10MB

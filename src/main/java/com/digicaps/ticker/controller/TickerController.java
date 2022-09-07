@@ -8,6 +8,10 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
+import java.net.HttpURLConnection;
+import java.net.MalformedURLException;
+import java.net.URL;
+import java.net.URLConnection;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.FileSystems;
 import java.nio.file.Path;
@@ -19,17 +23,22 @@ import java.nio.file.WatchService;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import javax.annotation.PostConstruct;
 
+import lombok.SneakyThrows;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.google.gson.JsonObject;
 
 import lombok.extern.slf4j.Slf4j;
+import org.thymeleaf.postprocessor.PostProcessor;
 
 @Slf4j
 @RestController
@@ -85,8 +94,16 @@ public class TickerController
 						 */
 						try {
 							String[] resultArr = fnFileRead(paths.getFileName().toString());
-							// TODO resultArr정보(식별자/메시지/반복횟수)를 "재난자막 전송결과 API"에 전달 (김정현부장님 검토중)
-							fnFileSave(resultArr);
+							String rs1 = fnTickerPush(resultArr[14], resultArr[9], resultArr[3]);	//재난자막정보 전달
+							String rs2 = fnTickerPolling(); //재난자막 송출여부 확인
+
+							// TODO resultCode에 따른 처리 (0000=성공, 2001=retry)
+							if (rs2 == "0000") {
+								fnFileSave(resultArr);
+							}else {
+								// retry
+								fnTickerPolling();
+							}
 						}catch (IOException e) {
 							e.printStackTrace();
 						}
@@ -131,10 +148,17 @@ public class TickerController
 
 		String line;
 		StringBuffer buf = new StringBuffer();
-		while( (line = bufferedReader.readLine()) != null ) {
-			buf.append(line);
+		int lineCnt = 0;
+		while( (line = bufferedReader.readLine()) != null )
+		{
+			if(lineCnt == 0) {
+				int index = line.indexOf("$");
+				buf.append(line.substring(1, line.length()));
+			}else {
+				buf.append(line);
+			}
 		}
-		
+
 		String allStr = buf.toString().replaceAll("\r\n", "");
 		log.info("allStr = {}", allStr);
 		String[] cutStrArr = allStr.split("\\^"); //[14]:식별자, [9]:메시지내용, [3]반복횟수
@@ -204,6 +228,58 @@ public class TickerController
 		}
 	}
 
+	/**
+	 * 재난자막정보 전달 
+	 */
+	@SneakyThrows
+	public String fnTickerPush(String SubIdenti, String SubRepeti, String SubText) throws RuntimeException
+	{
+		log.info("========== fnTickerPush() ==========");
+
+		Map<String, Object> params = new HashMap<String, Object>();
+		params.put("SubIdenti", SubIdenti);
+		params.put("SubRepeti", SubRepeti);
+		params.put("SubText", SubText);
+
+		StringBuilder postData = new StringBuilder();
+		for(Map.Entry<String,Object> param : params.entrySet()) {
+			if(postData.length() != 0) postData.append('&');
+			postData.append(param.getKey());
+			postData.append('=');
+			postData.append(param.getValue());
+		}
+		byte[] postDataBytes = postData.toString().getBytes("UTF-8");
+
+		URL url = new URL("10.13.14.1:5005/pcms/push");
+		HttpURLConnection con = (HttpURLConnection)url.openConnection();
+		con.setRequestMethod("POST");
+		con.setDoOutput(true);
+		con.getOutputStream().write(postDataBytes);
+
+		BufferedReader in = new BufferedReader(new InputStreamReader(con.getInputStream(), "UTF-8"));
+		String inputLine;
+		StringBuffer response = new StringBuffer();
+		while((inputLine = in.readLine()) != null) {
+			response.append(inputLine);
+		}
+		in.close();
+
+		String json = response.toString();
+		log.info("result json = []", json);
+
+		return "0000";
+	}
+
+	/**
+	 * 재난자막정보 송출여부 확인
+	 */
+	public String fnTickerPolling()
+	{
+		log.info("========== fnTickerPolling() ==========");
+		return "0000";
+	}
+
+
 	public void printArray(String[] array) {
 		if (array == null)
 			return;
@@ -211,5 +287,23 @@ public class TickerController
 		for(int i = 0; i < array.length; i++) {
 			log.info(" str[{}] = {}", i, array[i]);
 		}
+	}
+
+	@GetMapping("/")
+	public void logGet(){
+		log.trace("trace message");
+		log.debug("debug message");
+		log.info("info message"); // default
+		log.warn("warn message");
+		log.error("error message");
+	}
+
+	@PostMapping("/")
+	public void logPost(){
+		log.trace("trace message");
+		log.debug("debug message");
+		log.info("info message"); // default
+		log.warn("warn message");
+		log.error("error message");
 	}
 }

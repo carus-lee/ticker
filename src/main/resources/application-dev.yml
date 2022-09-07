@@ -1,9 +1,17 @@
 ticker:
   input:
-    dir: /home/cgms/inputData
+    dir: C:\home\cgms\inputData
     charset: euc-kr
   output:
-    dir: /home/cgms/outputData
+    dir: C:\home\cgms\outputData
   broadcast:
     date:
       format: yyyyMMddHHmmss
+log:
+  config:
+    path: /home/cgms/logs
+    filename:
+      info: log
+      error: err
+    maxHistory: 7
+    totalSizeCap: 10MB
