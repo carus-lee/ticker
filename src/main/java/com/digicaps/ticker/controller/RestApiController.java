@@ -32,11 +32,11 @@ public class RestApiController {
 		return resultMap;
 	}
 	
-	@GetMapping("/pcms/status/{indentifier}")
-	public Map<String, Object> tickerPolling(@PathVariable("indentifier") String indentifier)
+	@GetMapping("/pcms/status/{identifier}")
+	public Map<String, Object> tickerPolling(@PathVariable("identifier") String identifier)
 	{
 		log.info("===== [TEST]tickerPolling");
-		log.info("pathVariable indentifier = {}", indentifier);
+		log.info("pathVariable identifier = {}", identifier);
 		
 		LocalDateTime nowDateTime = LocalDateTime.now(ZoneId.of("Asia/Seoul"));
 		LocalDateTime nowDateTimeTo5miniteAdd = nowDateTime.plusMinutes(5L);
@@ -44,18 +44,20 @@ public class RestApiController {
 		String endDt = nowDateTimeTo5miniteAdd.format(DateTimeFormatter.ofPattern(DATE_FORMAT)); //startDt + 5분(임시)
 		
 		Map<String, Object> resultMap = new HashMap<>();
+		resultMap.put("identifier", identifier);
 		resultMap.put("ResultCode", "0000");
 		resultMap.put("broadcastDT", startDt);
 		resultMap.put("broadcastET", endDt);
+		resultMap.put("ErrorMsg", "");
 		
 		return resultMap;
 	}
 	
-	@GetMapping("/pcms/statusretry/{indentifier}")
-	public Map<String, Object> tickerPollingRetry(@PathVariable("indentifier") String indentifier)
+	@GetMapping("/pcms/statusretry/{identifier}")
+	public Map<String, Object> tickerPollingRetry(@PathVariable("identifier") String identifier)
 	{
 		log.info("===== [TEST]tickerPollingRetry");
-		log.info("pathVariable indentifier = {}", indentifier);
+		log.info("pathVariable identifier = {}", identifier);
 		Map<String, Object> resultMap = new HashMap<>();
 		resultMap.put("ResultCode", "2001");
 		

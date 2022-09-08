@@ -9,14 +9,16 @@ ticker:
       format: yyyyMMddHHmmss
 log:
   config:
-    path: /home/cgms/logs
+    path: C:\home\cgms\logs
     filename:
       info: log
       error: err
     maxHistory: 7
     totalSizeCap: 10MB
 api:
-  baseUrl: http://localhost:8080
+  baseUrl: http://10.13.14.1:5005
   pushUrl: /pcms/push
   pollingUrl: /pcms/status/
   pollingRetryUrl: /pcms/statusretry/
+  retry:
+    delayTime: 10000
