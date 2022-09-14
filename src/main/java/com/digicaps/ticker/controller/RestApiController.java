@@ -21,7 +21,16 @@ public class RestApiController {
 
 	@Value("${ticker.broadcast.date.format}")
 	private String DATE_FORMAT; //날짜포맷 (yyyyMMddHHmmss)
-	
+
+	@GetMapping("/")
+	public void logGet(){
+		log.trace("trace message");
+		log.debug("debug message");
+		log.info("info message");
+		log.warn("warn message");
+		log.error("error message");
+	}
+
 	@PostMapping("/pcms/push")
 	public Map<String, Object> tickerPush()
 	{
@@ -70,5 +79,15 @@ public class RestApiController {
 		log.info("delaying " + seconds +"seconds on " + Thread.currentThread());
 		Thread.sleep(seconds * 1000L);
 		return "delayed " + seconds + " seconds";
+	}
+
+
+	@GetMapping("/ex")
+	public void logError(){
+		try {
+			throw new RuntimeException();
+		}catch (Exception e) {
+			log.error("templates/error", e);
+		}
 	}
 }

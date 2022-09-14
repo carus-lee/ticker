@@ -1,24 +1,25 @@
 ticker:
   input:
-    dir: C:\home\cgms\inputData
+    dir: /Users/home/cgms/inputData
     charset: euc-kr
   output:
-    dir: C:\home\cgms\outputData
+    dir: /Users/home/cgms/outputData
   broadcast:
     date:
       format: yyyyMMddHHmmss
 log:
   config:
-    path: C:\home\cgms\logs
+    path: /Users/home/cgms/logs
     filename:
-      info: log
-      error: err
+      standard: catalina.log
+      error: error.log
     maxHistory: 7
     totalSizeCap: 10MB
 api:
+#  baseUrl: http://localhost:8080
   baseUrl: http://10.13.14.1:5005
   pushUrl: /pcms/push
   pollingUrl: /pcms/status/
   pollingRetryUrl: /pcms/statusretry/
   retry:
-    delayTime: 10000
+    delayTime: 3000

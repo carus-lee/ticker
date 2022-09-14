@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<configuration debug="true">
+<configuration debug="true" scanPeriod="30 seconds">
 
     <!-- 로그 패턴에 색상 적용 %clr(pattern){color}
         https://logback.qos.ch/manual/layouts.html#coloring
@@ -8,11 +8,12 @@
 
     <springProfile name="local"><property resource="application-local.yml" /></springProfile>
     <springProfile name="dev"><property resource="application-dev.yml" /></springProfile>
+    <springProfile name="prd"><property resource="application-prd.yml" /></springProfile>
 
     <!-- 프로퍼티(로그위치, 패턴 등) -->
     <springProperty name="LOG_PATH" source="log.config.path" />
-    <springProperty name="LOG_FILE_NAME" source="log.config.filename.info" />
-    <springProperty name="ERROR_LOG_FILE_NAME" source="log.config.filename.error" />
+    <springProperty name="LOG_STD_FILE_NAME" source="log.config.filename.standard" />
+    <springProperty name="LOG_ERROR_FILE_NAME" source="log.config.filename.error" />
     <springProperty name="LOG_MAX_HISTORY" source="log.config.maxHistory" />
     <springProperty name="LOG_TOTAL_SIZE_CAP" source="log.config.totalSizeCap" />
 
@@ -23,45 +24,68 @@
 
     <!-- 콘솔(STDOUT) -->
     <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
-        <layout class="ch.qos.logback.classic.PatternLayout">
+        <encoder>
             <pattern>${CONSOLE_LOG_PATTERN}</pattern>
-        </layout>
+        </encoder>
     </appender>
 
-    <!-- 파일(FILE) -->
-    <appender name="FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
-        <file>${LOG_PATH}/${LOG_FILE_NAME}</file>
+    <!-- 파일(STD_FILE) -->
+    <appender name="STD_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <filter class="ch.qos.logback.classic.filter.ThresholdFilter">
+            <level>INFO</level>
+        </filter>
+        <file>${LOG_PATH}/${LOG_STD_FILE_NAME}</file>
         <encoder>
             <pattern>${FILE_LOG_PATTERN}</pattern>
         </encoder>
         <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
-            <!-- daily rollover -->
-            <fileNamePattern>${LOG_PATH}/${LOG_FILE_NAME}.%d{yyyy-MM-dd}.log</fileNamePattern>
-            <!-- keep 30 days' worth of history capped at 3GB total size -->
+            <fileNamePattern>${LOG_PATH}/${LOG_STD_FILE_NAME}.%d{yyyy-MM-dd}.log</fileNamePattern>
+            <maxHistory>${LOG_MAX_HISTORY}</maxHistory>
+            <totalSizeCap>${LOG_TOTAL_SIZE_CAP}</totalSizeCap>
+        </rollingPolicy>
+    </appender>
+    <!-- 파일(ERROR FILE) -->
+    <appender name="ERROR_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <filter class="ch.qos.logback.classic.filter.ThresholdFilter">
+            <level>ERROR</level>
+        </filter>
+        <file>${LOG_PATH}/${LOG_ERROR_FILE_NAME}</file>
+        <encoder>
+            <pattern>${FILE_LOG_PATTERN}</pattern>
+        </encoder>
+        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+            <fileNamePattern>${LOG_PATH}/${LOG_ERROR_FILE_NAME}.%d{yyyy-MM-dd}.log</fileNamePattern>
             <maxHistory>${LOG_MAX_HISTORY}</maxHistory>
             <totalSizeCap>${LOG_TOTAL_SIZE_CAP}</totalSizeCap>
         </rollingPolicy>
     </appender>
 
+    <!-- ======================= -->
     <!-- spring profile별 로그 설정 -->
-    <!-- local -->
-    <springProfile name="local">
-        <root level="info">
-            <appender-ref ref="STDOUT" />
-        </root>
-        <logger name="org.springframework.web" level="debug">
-            <appender-ref ref="FILE" />
+    <!-- ======================= -->
+    <!-- LOCAL, DEV -->
+    <springProfile name="local, dev">
+        <root level="info"><appender-ref ref="STDOUT" /></root>
+        <logger name="org">
+            <appender-ref ref="STD_FILE" />
+            <appender-ref ref="ERROR_FILE" />
         </logger>
-    </springProfile>
-    <!-- dev -->
-    <springProfile name="local">
-        <root level="info">
-            <appender-ref ref="STDOUT" />
-        </root>
-        <logger name="org.springframework.web" level="debug">
-            <appender-ref ref="FILE" />
+        <logger name="com.digicaps.ticker">
+            <appender-ref ref="STD_FILE" />
+            <appender-ref ref="ERROR_FILE" />
         </logger>
     </springProfile>
     <!-- PRD -->
+    <springProfile name="prd">
+        <root level="info"><appender-ref ref="STDOUT" /></root>
+        <logger name="org">
+            <appender-ref ref="STD_FILE" />
+            <appender-ref ref="ERROR_FILE" />
+        </logger>
+        <logger name="com.digicaps.ticker">
+            <appender-ref ref="STD_FILE" />
+            <appender-ref ref="ERROR_FILE" />
+        </logger>
+    </springProfile>
 
 </configuration>
